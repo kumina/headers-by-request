@@ -1,4 +1,4 @@
-package traefik_routing_plugin_test
+package headers_by_request_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/kumina/traefik-routing-plugin"
+	"github.com/kumina/headers-by-request"
 )
 
 type UrlResponse struct {
@@ -20,14 +20,14 @@ func TestRouter(t *testing.T)  {
 	ctx := context.Background()
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {})
 
-	body1, _ := json.Marshal(traefik_routing_plugin.HeadersRequested{
+	body1, _ := json.Marshal(headers_by_request.HeadersRequested{
 		Headers: map[string]string{
 			"header1": "value1",
 			"header2": "value2",
 		},
 	})
 
-	body2, _ := json.Marshal(traefik_routing_plugin.HeadersRequested{
+	body2, _ := json.Marshal(headers_by_request.HeadersRequested{
 		Headers: map[string]string{
 			"header3": "value3",
 			"header4": "value4",
@@ -49,12 +49,12 @@ func TestRouter(t *testing.T)  {
 
 	defer ts.Close()
 	mockServerURL := ts.URL
-	traefik_routing_plugin.Client = ts.Client()
+	headers_by_request.Client = ts.Client()
 
-	cfg := traefik_routing_plugin.CreateConfig()
+	cfg := headers_by_request.CreateConfig()
 	cfg.UrlHeaderRequest = mockServerURL
 
-	handler, err := traefik_routing_plugin.New(ctx, next, cfg, "headers-by-request")
+	handler, err := headers_by_request.New(ctx, next, cfg, "headers-by-request")
 	if err != nil {
 		t.Fatal(err)
 	}

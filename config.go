@@ -1,4 +1,4 @@
-package traefik_routing_plugin
+package headers_by_request
 
 // Config the plugin configuration.
 type Config struct {
