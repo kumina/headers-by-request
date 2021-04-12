@@ -1,0 +1,15 @@
+# The name of your plugin as displayed in the Traefik Pilot web UI.
+displayName: Headers by request
+
+# For now, `middleware` is the only type available.
+type: middleware
+
+# The import path of your plugin.
+import: github.com/kumina/headers-by-request
+
+# A brief description of what your plugin is doing.
+summary: Requesting headers dynamically via a url post.
+
+# Test data the plugin will use to test itself on startup
+testData:
+  urlHeaderRequest: http://127.0.0.1/resolve
