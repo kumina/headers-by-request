@@ -53,6 +53,7 @@ func TestRouter(t *testing.T)  {
 
 	cfg := headers_by_request.CreateConfig()
 	cfg.UrlHeaderRequest = mockServerURL
+	cfg.EnableTiming = true
 
 	handler, err := headers_by_request.New(ctx, next, cfg, "headers-by-request")
 	if err != nil {

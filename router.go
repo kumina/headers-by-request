@@ -22,6 +22,7 @@ type Router struct {
 
 	// Our custom configuration
 	dynamicHeaderUrl string
+	enableTiming bool
 }
 
 // Function needed for Traefik to recognize this module as a plugin
@@ -40,6 +41,7 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 
 	return &Router{
 		dynamicHeaderUrl: config.UrlHeaderRequest,
+		enableTiming: config.EnableTiming,
 		next:   next,
 		name:   name,
 	}, nil
@@ -51,6 +53,10 @@ type HeadersRequested struct {
 
 
 func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	startTime := time.Time{}
+	if a.enableTiming {
+		startTime = time.Now()
+	}
 	log.Println(fmt.Sprintf("Resolving header for %s", req.URL))
 
 	requestBody, err := json.Marshal(map[string]string{
@@ -96,5 +102,9 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		req.Header.Set(key, value)
 	}
 
+	if a.enableTiming {
+		timeDiff := time.Now().Sub(startTime)
+		log.Println(fmt.Sprintf("%s took %s", a.name, timeDiff))
+	}
 	a.next.ServeHTTP(rw, req)
 }

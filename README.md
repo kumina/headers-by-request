@@ -8,6 +8,7 @@ Configuration:
 plugin:
   headers-by-request:
     urlHeaderRequest: "http://127.0.0.1/resolve"
+    enableTiming: true
 ```
 
 Request:

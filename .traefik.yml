@@ -13,3 +13,4 @@ summary: Requesting headers dynamically via a url post.
 # Test data the plugin will use to test itself on startup
 testData:
   urlHeaderRequest: http://127.0.0.1/resolve
+  enableTiming: true
