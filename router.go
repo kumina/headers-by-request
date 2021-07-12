@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"regexp"
+	"sort"
 	"time"
 )
 
@@ -31,7 +33,6 @@ type Router struct {
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
 	log.Println("New middleware created.")
 
-	// todo: check if the url is valid?
 	if len(config.UrlHeaderRequest) == 0 {
 		return nil, fmt.Errorf("DynamicHeaderUrl cannot be empty")
 	}
@@ -47,8 +48,29 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 	}, nil
 }
 
-type HeadersRequested struct {
-	Headers map[string]string `json:"headers,omitempty"`
+
+
+type Header struct {
+	Id        int    `json:"id"`
+	Name      string `json:"name"`
+	ServiceId int    `json:"service_id"`
+	Value     string `json:"value"`
+}
+
+type Rewrite struct {
+	Id int `json:"id"`
+	Pattern string `json:"pattern"`
+	ServiceId int `json:"service_id"`
+	Template string `json:"template"`
+	Weight int `json:"weight"`
+}
+
+
+type Requested struct {
+	Payload struct{
+		Headers []Header `json:"headers,omitempty"`
+		Rewrites []Rewrite `json:"rewrites,omitempty"`
+	} `json:"payload"`
 }
 
 
@@ -76,6 +98,11 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if resp.StatusCode != 200 {
+		if resp.StatusCode == 409 {
+			log.Println(fmt.Sprintf("Ambiguous request."))
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
 		log.Println(fmt.Sprintf("Request return statuscode %d.", resp.StatusCode))
 		rw.WriteHeader(http.StatusNotFound)
 		return
@@ -89,17 +116,45 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
-	headers := &HeadersRequested{}
-	err = json.Unmarshal(body, headers)
+	requested := &Requested{}
+	err = json.Unmarshal(body, requested)
 	if err != nil {
 		log.Println("Could not unmarshal requests body.")
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	for key, value := range headers.Headers {
-		log.Println(fmt.Sprintf("Setting header: %s : %s", key, value))
-		req.Header.Set(key, value)
+	for _, header := range requested.Payload.Headers {
+		log.Println(fmt.Sprintf("Setting header: %s : %s", header.Name, header.Value))
+		req.Header.Set(header.Name, header.Value)
+	}
+
+	// We only apply one rewrite when there are multiple.
+	//rewrite := getHeaviestRewrite(requested.Payload.Rewrites)
+
+	rewrites := requested.Payload.Rewrites
+
+	// Sorts rewrites based on weight, high weight first in slice
+	sort.Slice(rewrites[:], func(i, j int) bool {
+		return rewrites[i].Weight > rewrites[j].Weight
+	})
+
+	for _, rewrite := range rewrites {
+		check, err := regexp.Compile(rewrite.Pattern)
+		if err != nil {
+			log.Println("Could not compile regex.")
+			continue
+		}
+
+		fmt.Println(rewrite.Template)
+		t := addDollarSigns(rewrite.Template)
+		fmt.Println(string(t))
+
+		if check.Match([]byte(req.URL.Path)) {
+			newpath := check.ReplaceAll([]byte(req.URL.Path), t)
+			req.URL.Path = string(newpath)
+			break
+		}
 	}
 
 	if a.enableTiming {
@@ -107,4 +162,11 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		log.Println(fmt.Sprintf("%s took %s", a.name, timeDiff))
 	}
 	a.next.ServeHTTP(rw, req)
+}
+
+func addDollarSigns(template string) []byte {
+	c := regexp.MustCompile(`{([^}]+)}`)
+	//c := regexp.MustCompile(`\{`)
+	//c.ReplaceAll([]byte(template), []byte("${"))
+	return c.ReplaceAll([]byte(template), []byte("${${1}}"))
 }
