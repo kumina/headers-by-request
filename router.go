@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"time"
@@ -89,7 +90,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	fullUrl := fmt.Sprintf("%s%s", req.URL.Host, req.URL.Path)
 
-	log.Println(fmt.Sprintf("Resolving header for %s", fullUrl))
+	log.Println(fmt.Sprintf("Resolving for %s", fullUrl))
 
 	requestBody, err := json.Marshal(map[string]string{
 		"request": fullUrl,
@@ -160,7 +161,13 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 		if check.Match([]byte(path)) {
 			newpath := check.ReplaceAll([]byte(path), t)
-			req.URL.Path = string(newpath)
+			req.URL.Path, err = url.PathUnescape(string(newpath))
+			if err != nil {
+				log.Println("Could not rewrite Path.")
+				continue
+			}
+			log.Println(fmt.Sprintf("Apply rewrite: %s -> %s", path, string(newpath)))
+			req.RequestURI = req.URL.RequestURI()
 			break
 		}
 	}
@@ -169,6 +176,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		timeDiff := time.Now().Sub(startTime)
 		log.Println(fmt.Sprintf("%s took %s", a.name, timeDiff))
 	}
+
 	a.next.ServeHTTP(rw, req)
 }
 

@@ -182,6 +182,7 @@ func TestRouter(t *testing.T)  {
 	handler.ServeHTTP(recorder, req)
 
 	assertCode(t, recorder, 404)
+	fmt.Println(req.RequestURI)
 }
 
 func assertHeader(t *testing.T, req *http.Request, key, expected string) {
