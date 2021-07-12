@@ -82,7 +82,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	log.Println(fmt.Sprintf("Resolving header for %s", req.URL))
 
 	requestBody, err := json.Marshal(map[string]string{
-		"url": fmt.Sprintf("%s", req.URL),
+		"request": fmt.Sprintf("%s", req.URL),
 	})
 	if err != nil {
 		log.Println("Requestbody marshalling error.")
@@ -146,9 +146,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			continue
 		}
 
-		fmt.Println(rewrite.Template)
 		t := addDollarSigns(rewrite.Template)
-		fmt.Println(string(t))
 
 		if check.Match([]byte(req.URL.Path)) {
 			newpath := check.ReplaceAll([]byte(req.URL.Path), t)

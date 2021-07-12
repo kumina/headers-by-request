@@ -14,7 +14,7 @@ import (
 )
 
 type UrlResponse struct {
-	Url string `json:"url,omitempty"`
+	Request string `json:"request,omitempty"`
 }
 
 func TestRouter(t *testing.T)  {
@@ -105,7 +105,7 @@ func TestRouter(t *testing.T)  {
 		body, _ := ioutil.ReadAll(r.Body)
 		urlresponse := &UrlResponse{}
 		_ = json.Unmarshal(body, urlresponse)
-		u, _:= url.Parse(urlresponse.Url)
+		u, _:= url.Parse(urlresponse.Request)
 		if u.Path == "/test1" {
 			w.Write(body1)
 		} else if u.Path == "/test2/path/rewritepart/bla" {

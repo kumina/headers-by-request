@@ -14,7 +14,7 @@ plugin:
 Request:
 ```json
 { 
-  "url": "https://rout-to-app.domain.com/volume1"
+  "request": "https://route-to-app.domain.com/volume1"
 }
 ```
 
