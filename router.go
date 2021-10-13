@@ -123,7 +123,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 	if resp.StatusCode != 200 {
 		if resp.StatusCode == 409 {
-			a.log.WithField("url", fullUrl).Info(fmt.Sprintf("Ambiguous request."))
+			a.log.WithField("url", fullUrl).Warn(fmt.Sprintf("Ambiguous request."))
 			rw.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -149,7 +149,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	for _, header := range requested.Payload.Headers {
-		a.log.WithField(header.Name, header.Value).Info("Setting header.")
+		a.log.WithField("header", fmt.Sprintf("%s:%s", header.Name, header.Value)).Info("Setting header.")
 		req.Header.Set(header.Name, header.Value)
 	}
 
@@ -187,7 +187,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if a.enableTiming {
 		timeDiff := time.Now().Sub(startTime)
-		a.log.WithField("duration", timeDiff.String()).Info()
+		a.log.WithField("duration", timeDiff.Nanoseconds()).Info()
 	}
 
 	a.next.ServeHTTP(rw, req)
