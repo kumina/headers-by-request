@@ -98,8 +98,6 @@ func TestRouter(t *testing.T)  {
 
 	body4, err := json.Marshal(r4)
 
-	fmt.Println(string(body4))
-
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := ioutil.ReadAll(r.Body)
