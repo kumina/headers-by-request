@@ -5,13 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -26,8 +25,54 @@ type Router struct {
 
 	// Our custom configuration
 	dynamicHeaderUrl string
-	enableTiming bool
-	log *log.Entry
+	enableTiming     bool
+	logger           *LogLine
+}
+
+type LogLine struct {
+	Timestamp time.Time         `json:"timestamp"`
+	Msg       string            `json:"msg,omitempty"`
+	Level     string            `json:"level"`
+	Details   map[string]string `json:"details,inline"`
+}
+
+func NewLog() *LogLine {
+	return &LogLine{
+		Timestamp: time.Now(),
+		Level:     "",
+		Msg:       "",
+		Details:   map[string]string{},
+	}
+}
+
+func (l *LogLine) Info(msg string) *LogLine {
+	n := NewLog()
+	n.Level = "info"
+	n.Msg = msg
+	return n
+}
+
+func (l *LogLine) Error(msg string) *LogLine {
+	n := NewLog()
+	n.Level = "error"
+	n.Msg = msg
+	return n
+}
+
+func (l *LogLine) Warn(msg string) *LogLine {
+	n := NewLog()
+	n.Level = "warning"
+	n.Msg = msg
+	return n
+}
+
+func (l *LogLine) LogJson(values map[string]string) {
+	for k, v := range values {
+		l.Details[k] = v
+	}
+	l.Timestamp = time.Now()
+	out, _ := json.Marshal(l)
+	fmt.Println(string(out))
 }
 
 // Function needed for Traefik to recognize this module as a plugin
@@ -35,14 +80,9 @@ type Router struct {
 // by overriding different functions of the interface
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
 	// Log as JSON instead of the default ASCII formatter.
-	log.SetFormatter(&log.JSONFormatter{})
+	logger := NewLog()
 
-	log.SetOutput(os.Stdout)
-
-	logcontext := log.WithFields(log.Fields{
-		"middleware": name,
-	})
-	logcontext.Info("New middleware created.")
+	logger.Info("New middleware created.").LogJson(nil)
 
 	if len(config.UrlHeaderRequest) == 0 {
 		return nil, fmt.Errorf("DynamicHeaderUrl cannot be empty")
@@ -53,14 +93,12 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 
 	return &Router{
 		dynamicHeaderUrl: config.UrlHeaderRequest,
-		enableTiming: config.EnableTiming,
-		next:   next,
-		name:   name,
-		log: logcontext,
+		enableTiming:     config.EnableTiming,
+		next:             next,
+		name:             name,
+		logger:           logger,
 	}, nil
 }
-
-
 
 type Header struct {
 	Id        int    `json:"id"`
@@ -70,21 +108,19 @@ type Header struct {
 }
 
 type Rewrite struct {
-	Id int `json:"id"`
-	Pattern string `json:"pattern"`
-	ServiceId int `json:"service_id"`
-	Template string `json:"template"`
-	Weight int `json:"weight"`
+	Id        int    `json:"id"`
+	Pattern   string `json:"pattern"`
+	ServiceId int    `json:"service_id"`
+	Template  string `json:"template"`
+	Weight    int    `json:"weight"`
 }
 
-
 type Requested struct {
-	Payload struct{
-		Headers []Header `json:"headers,omitempty"`
+	Payload struct {
+		Headers  []Header  `json:"headers,omitempty"`
 		Rewrites []Rewrite `json:"rewrites,omitempty"`
 	} `json:"payload"`
 }
-
 
 func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	startTime := time.Time{}
@@ -103,13 +139,13 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	fullUrl := fmt.Sprintf("%s%s", req.URL.Host, req.URL.Path)
 
-	a.log.WithField("url", fullUrl).Info("Resolving route")
+	a.logger.Info("Resolving route.").LogJson(map[string]string{"url": fullUrl})
 
 	requestBody, err := json.Marshal(map[string]string{
 		"request": fullUrl,
 	})
 	if err != nil {
-		a.log.Error("Requestbody marshalling error.")
+		a.logger.Error("Requestbody marshalling error.").LogJson(map[string]string{"url": fullUrl})
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -117,17 +153,18 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	resp, err := Client.Post(a.dynamicHeaderUrl, "application/json", bytes.NewBuffer(requestBody))
 
 	if err != nil {
-		a.log.Error("Request error.")
+		//a.log.Error("Request error.")
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 	if resp.StatusCode != 200 {
 		if resp.StatusCode == 409 {
-			a.log.WithField("url", fullUrl).Warn(fmt.Sprintf("Ambiguous request."))
+			a.logger.Info("Ambiguous request.").LogJson(map[string]string{"url": fullUrl})
 			rw.WriteHeader(http.StatusNotFound)
 			return
 		}
-		a.log.WithField("code", resp.StatusCode).Error(fmt.Sprintf("Unknown statuscode."))
+		a.logger.Info("Unknown status code response from DynamicHeaderUrl.").
+			LogJson(map[string]string{"url": fullUrl, "code": strconv.Itoa(resp.StatusCode)})
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -136,20 +173,22 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		a.log.Error("Could not read requests body.")
+		a.logger.Info("Could not read requests body.").LogJson(map[string]string{"url": fullUrl})
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 	requested := &Requested{}
 	err = json.Unmarshal(body, requested)
 	if err != nil {
-		a.log.Error("Could not unmarshal requests body.")
+		a.logger.Info("Could not unmarshal requests body.").LogJson(map[string]string{"url": fullUrl})
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	for _, header := range requested.Payload.Headers {
-		a.log.WithField("header", fmt.Sprintf("%s:%s", header.Name, header.Value)).Info("Setting header.")
+
+		a.logger.Info("Setting header.").LogJson(map[string]string{"url": fullUrl, "header_key": header.Name,
+			"header_value": header.Value})
 		req.Header.Set(header.Name, header.Value)
 	}
 
@@ -166,7 +205,8 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	for _, rewrite := range rewrites {
 		check, err := regexp.Compile(rewrite.Pattern)
 		if err != nil {
-			a.log.WithField("pattern", rewrite.Pattern).Warn("Could not compile regex.")
+			a.logger.Warn("Could not compile regex.").LogJson(map[string]string{"url": fullUrl,
+				"pattern": rewrite.Pattern})
 			continue
 		}
 
@@ -176,10 +216,11 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			newpath := check.ReplaceAll([]byte(path), t)
 			req.URL.Path, err = url.PathUnescape(string(newpath))
 			if err != nil {
-				a.log.WithField("path", newpath).Warn("Could not rewrite Path.")
+				//a.log.WithField("path", newpath).Warn("Could not rewrite Path.")
 				continue
 			}
-			a.log.WithField("old_path", path).WithField("new_path", string(newpath)).Info("Apply rewrite.")
+			a.logger.Warn("Apply rewrite.").LogJson(map[string]string{"url": fullUrl,
+				"old_path": path, "new_path": string(newpath)})
 			req.RequestURI = req.URL.RequestURI()
 			break
 		}
@@ -187,7 +228,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if a.enableTiming {
 		timeDiff := time.Now().Sub(startTime)
-		a.log.WithField("duration", timeDiff.Nanoseconds()).Info()
+		a.logger.Info("Resolving time.").LogJson(map[string]string{"url": fullUrl, "duration": strconv.FormatInt(timeDiff.Nanoseconds(), 10)})
 	}
 
 	a.next.ServeHTTP(rw, req)
