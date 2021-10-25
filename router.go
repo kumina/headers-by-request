@@ -26,7 +26,6 @@ type Router struct {
 	// Our custom configuration
 	dynamicHeaderUrl string
 	enableTiming     bool
-	logger           *LogLine
 }
 
 type LogLine struct {
@@ -45,21 +44,21 @@ func NewLog() *LogLine {
 	}
 }
 
-func (l *LogLine) Info(msg string) *LogLine {
+func Info(msg string) *LogLine {
 	n := NewLog()
 	n.Level = "info"
 	n.Msg = msg
 	return n
 }
 
-func (l *LogLine) Error(msg string) *LogLine {
+func Error(msg string) *LogLine {
 	n := NewLog()
 	n.Level = "error"
 	n.Msg = msg
 	return n
 }
 
-func (l *LogLine) Warn(msg string) *LogLine {
+func Warn(msg string) *LogLine {
 	n := NewLog()
 	n.Level = "warning"
 	n.Msg = msg
@@ -80,9 +79,8 @@ func (l *LogLine) LogJson(values map[string]string) {
 // by overriding different functions of the interface
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
 	// Log as JSON instead of the default ASCII formatter.
-	logger := NewLog()
 
-	logger.Info("New middleware created.").LogJson(nil)
+	Info("New middleware created.").LogJson(nil)
 
 	if len(config.UrlHeaderRequest) == 0 {
 		return nil, fmt.Errorf("DynamicHeaderUrl cannot be empty")
@@ -96,7 +94,6 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		enableTiming:     config.EnableTiming,
 		next:             next,
 		name:             name,
-		logger:           logger,
 	}, nil
 }
 
@@ -139,13 +136,13 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	fullUrl := fmt.Sprintf("%s%s", req.URL.Host, req.URL.Path)
 
-	a.logger.Info("Resolving route.").LogJson(map[string]string{"url": fullUrl})
+	Info("Resolving route.").LogJson(map[string]string{"url": fullUrl})
 
 	requestBody, err := json.Marshal(map[string]string{
 		"request": fullUrl,
 	})
 	if err != nil {
-		a.logger.Error("Requestbody marshalling error.").LogJson(map[string]string{"url": fullUrl})
+		Error("Requestbody marshalling error.").LogJson(map[string]string{"url": fullUrl})
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -159,11 +156,11 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 	if resp.StatusCode != 200 {
 		if resp.StatusCode == 409 {
-			a.logger.Info("Ambiguous request.").LogJson(map[string]string{"url": fullUrl})
+			Info("Ambiguous request.").LogJson(map[string]string{"url": fullUrl})
 			rw.WriteHeader(http.StatusNotFound)
 			return
 		}
-		a.logger.Info("Unknown status code response from DynamicHeaderUrl.").
+		Info("Unknown status code response from DynamicHeaderUrl.").
 			LogJson(map[string]string{"url": fullUrl, "code": strconv.Itoa(resp.StatusCode)})
 		rw.WriteHeader(http.StatusNotFound)
 		return
@@ -173,21 +170,21 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		a.logger.Info("Could not read requests body.").LogJson(map[string]string{"url": fullUrl})
+		Info("Could not read requests body.").LogJson(map[string]string{"url": fullUrl})
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 	requested := &Requested{}
 	err = json.Unmarshal(body, requested)
 	if err != nil {
-		a.logger.Info("Could not unmarshal requests body.").LogJson(map[string]string{"url": fullUrl})
+		Info("Could not unmarshal requests body.").LogJson(map[string]string{"url": fullUrl})
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	for _, header := range requested.Payload.Headers {
 
-		a.logger.Info("Setting header.").LogJson(map[string]string{"url": fullUrl, "header_key": header.Name,
+		Info("Setting header.").LogJson(map[string]string{"url": fullUrl, "header_key": header.Name,
 			"header_value": header.Value})
 		req.Header.Set(header.Name, header.Value)
 	}
@@ -205,7 +202,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	for _, rewrite := range rewrites {
 		check, err := regexp.Compile(rewrite.Pattern)
 		if err != nil {
-			a.logger.Warn("Could not compile regex.").LogJson(map[string]string{"url": fullUrl,
+			Warn("Could not compile regex.").LogJson(map[string]string{"url": fullUrl,
 				"pattern": rewrite.Pattern})
 			continue
 		}
@@ -219,7 +216,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				//a.log.WithField("path", newpath).Warn("Could not rewrite Path.")
 				continue
 			}
-			a.logger.Warn("Apply rewrite.").LogJson(map[string]string{"url": fullUrl,
+			Warn("Apply rewrite.").LogJson(map[string]string{"url": fullUrl,
 				"old_path": path, "new_path": string(newpath)})
 			req.RequestURI = req.URL.RequestURI()
 			break
@@ -228,7 +225,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if a.enableTiming {
 		timeDiff := time.Now().Sub(startTime)
-		a.logger.Info("Resolving time.").LogJson(map[string]string{"url": fullUrl, "duration": strconv.FormatInt(timeDiff.Nanoseconds(), 10)})
+		Info("Resolving time.").LogJson(map[string]string{"url": fullUrl, "duration": strconv.FormatInt(timeDiff.Nanoseconds(), 10)})
 	}
 
 	a.next.ServeHTTP(rw, req)
