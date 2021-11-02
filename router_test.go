@@ -179,7 +179,7 @@ func TestRouter(t *testing.T)  {
 
 	handler.ServeHTTP(recorder, req)
 
-	assertCode(t, recorder, 404)
+	assertCode(t, recorder, 409)
 	fmt.Println(req.RequestURI)
 }
 

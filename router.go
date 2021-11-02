@@ -29,7 +29,7 @@ type Router struct {
 }
 
 type LogLine struct {
-	Timestamp time.Time         `json:"timestamp"`
+	Timestamp time.Time         `json:"time"`
 	Msg       string            `json:"msg,omitempty"`
 	Level     string            `json:"level"`
 	Details   map[string]string `json:"details,inline"`
@@ -143,26 +143,26 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	})
 	if err != nil {
 		Error("Requestbody marshalling error.").LogJson(map[string]string{"url": fullUrl})
-		rw.WriteHeader(http.StatusNotFound)
+		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	resp, err := Client.Post(a.dynamicHeaderUrl, "application/json", bytes.NewBuffer(requestBody))
 
 	if err != nil {
-		//a.log.Error("Request error.")
-		rw.WriteHeader(http.StatusNotFound)
+		Info(fmt.Sprintf("Request to %s failed", a.dynamicHeaderUrl)).LogJson(map[string]string{"url": fullUrl})
+		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if resp.StatusCode != 200 {
 		if resp.StatusCode == 409 {
 			Info("Ambiguous request.").LogJson(map[string]string{"url": fullUrl})
-			rw.WriteHeader(http.StatusNotFound)
+			rw.WriteHeader(http.StatusConflict)
 			return
 		}
 		Info("Unknown status code response from DynamicHeaderUrl.").
 			LogJson(map[string]string{"url": fullUrl, "code": strconv.Itoa(resp.StatusCode)})
-		rw.WriteHeader(http.StatusNotFound)
+		rw.WriteHeader(http.StatusNotImplemented)
 		return
 	}
 
@@ -171,14 +171,14 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		Info("Could not read requests body.").LogJson(map[string]string{"url": fullUrl})
-		rw.WriteHeader(http.StatusNotFound)
+		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	requested := &Requested{}
 	err = json.Unmarshal(body, requested)
 	if err != nil {
 		Info("Could not unmarshal requests body.").LogJson(map[string]string{"url": fullUrl})
-		rw.WriteHeader(http.StatusNotFound)
+		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -216,7 +216,7 @@ func (a *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				//a.log.WithField("path", newpath).Warn("Could not rewrite Path.")
 				continue
 			}
-			Warn("Apply rewrite.").LogJson(map[string]string{"url": fullUrl,
+			Info("Apply rewrite.").LogJson(map[string]string{"url": fullUrl,
 				"old_path": path, "new_path": string(newpath)})
 			req.RequestURI = req.URL.RequestURI()
 			break
